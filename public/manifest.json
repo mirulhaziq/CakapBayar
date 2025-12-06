@@ -1,0 +1,28 @@
+{
+  "name": "CakapBayar - Voice POS Malaysia",
+  "short_name": "CakapBayar",
+  "description": "Voice-enabled POS system for Malaysian food stalls",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f97316",
+  "theme_color": "#f97316",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "screenshots": [],
+  "shortcuts": []
+}
+
