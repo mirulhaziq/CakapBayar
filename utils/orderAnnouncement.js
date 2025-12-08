@@ -113,3 +113,4 @@ export function generatePaymentAnnouncement(total, paymentMethod) {
 export const formatPriceMalay = formatPriceEnglish;
 export const numberToMalay = numberToWord;
 
+

@@ -369,3 +369,4 @@ function DayDetailModal({ summary, onClose }) {
   );
 }
 
+
