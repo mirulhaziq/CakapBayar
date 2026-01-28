@@ -1,0 +1,165 @@
+// CakapNBayar - Voice-Powered POS System
+// PostgreSQL database via Supabase with Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==================== TABLE 1: USERS ====================
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String?  @unique
+  phone        String?
+  businessName String?  @map("business_name")
+  businessType String   @default("Warung") @map("business_type")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  menuItems       MenuItem[]
+  shifts          Shift[]
+  transactions    Transaction[]
+  expenses        Expense[]
+  dailySummaries  DailySummary[]
+  voiceRecordings VoiceRecording[]
+
+  @@map("users")
+}
+
+// ==================== TABLE 2: MENU_ITEMS ====================
+model MenuItem {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @default(1) @map("user_id")
+  name        String
+  nameMalay   String   @map("name_malay")
+  price       Decimal  @db.Decimal(10, 2)
+  category    String
+  aliases     Json     @default("[]") // Array of alternative names for voice recognition
+  isAvailable Boolean  @default(true) @map("is_available")
+  imageUrl    String?  @map("image_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isAvailable])
+  @@map("menu_items")
+}
+
+// ==================== TABLE 3: SHIFTS ====================
+model Shift {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @default(1) @map("user_id")
+  openedAt       DateTime  @map("opened_at")
+  closedAt       DateTime? @map("closed_at")
+  openingCash    Decimal   @default(0) @db.Decimal(10, 2) @map("opening_cash")
+  closingCash    Decimal?  @db.Decimal(10, 2) @map("closing_cash")
+  expectedCash   Decimal?  @db.Decimal(10, 2) @map("expected_cash")
+  cashDifference Decimal?  @db.Decimal(10, 2) @map("cash_difference")
+  status         String    @default("active") // 'active' or 'closed'
+  notes          String?
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  expenses     Expense[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("shifts")
+}
+
+// ==================== TABLE 4: TRANSACTIONS ====================
+model Transaction {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @default(1) @map("user_id")
+  shiftId         Int?     @map("shift_id")
+  items           Json     // Array of {item_id, name, price, quantity}
+  subtotal        Decimal  @db.Decimal(10, 2)
+  tax             Decimal  @default(0) @db.Decimal(10, 2)
+  total           Decimal  @db.Decimal(10, 2)
+  paymentMethod   String   @map("payment_method") // 'Tunai', 'Kad', 'E-Wallet', 'QR Pay'
+  paymentReceived Decimal? @db.Decimal(10, 2) @map("payment_received")
+  changeGiven     Decimal? @db.Decimal(10, 2) @map("change_given")
+  transactionDate DateTime @default(now()) @map("transaction_date")
+  notes           String?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift Shift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([shiftId])
+  @@index([transactionDate])
+  @@index([paymentMethod])
+  @@map("transactions")
+}
+
+// ==================== TABLE 5: EXPENSES ====================
+model Expense {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @default(1) @map("user_id")
+  shiftId      Int?     @map("shift_id")
+  amount       Decimal  @db.Decimal(10, 2)
+  category     String   // 'Bahan Mentah', 'Gaji', 'Sewa', 'Utiliti', 'Pengangkutan', 'Lain-lain'
+  description  String?
+  expenseDate  DateTime @default(now()) @map("expense_date")
+  receiptImage String?  @map("receipt_image")
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift Shift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([shiftId])
+  @@index([expenseDate])
+  @@index([category])
+  @@map("expenses")
+}
+
+// ==================== TABLE 6: DAILY_SUMMARIES ====================
+model DailySummary {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @default(1) @map("user_id")
+  summaryDate      String   @unique @map("summary_date") // YYYY-MM-DD format
+  totalSales       Decimal  @default(0) @db.Decimal(10, 2) @map("total_sales")
+  totalExpenses    Decimal  @default(0) @db.Decimal(10, 2) @map("total_expenses")
+  netProfit        Decimal  @default(0) @db.Decimal(10, 2) @map("net_profit")
+  transactionCount Int      @default(0) @map("transaction_count")
+  cashPayments     Decimal  @default(0) @db.Decimal(10, 2) @map("cash_payments")
+  cardPayments     Decimal  @default(0) @db.Decimal(10, 2) @map("card_payments")
+  ewalletPayments  Decimal  @default(0) @db.Decimal(10, 2) @map("ewallet_payments")
+  qrPayments       Decimal  @default(0) @db.Decimal(10, 2) @map("qr_payments")
+  topSellingItems  Json?    @map("top_selling_items")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([summaryDate])
+  @@map("daily_summaries")
+}
+
+// ==================== TABLE 7: VOICE_RECORDINGS ====================
+model VoiceRecording {
+  id               Int      @id @default(autoincrement())
+  userId           Int      @default(1) @map("user_id")
+  audioUrl         String?  @map("audio_url")
+  transcription    String
+  parsedOrder      Json     @map("parsed_order")
+  confidenceScore  Decimal  @db.Decimal(3, 2) @map("confidence_score")
+  processingTimeMs Int      @map("processing_time_ms")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("voice_recordings")
+}
