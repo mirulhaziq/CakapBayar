@@ -2,6 +2,8 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { CreateExpenseSchema, UpdateExpenseSchema, DeleteExpenseSchema } from '@/lib/validation/schemas'
+import { ZodError } from 'zod'
 
 export async function createExpense(data: {
   amount: number
@@ -10,6 +12,9 @@ export async function createExpense(data: {
   receiptImage?: string
 }) {
   try {
+    // Validate input
+    const validated = CreateExpenseSchema.parse(data)
+    
     // Get active shift
     const activeShift = await prisma.shift.findFirst({
       where: {
@@ -22,10 +27,10 @@ export async function createExpense(data: {
       data: {
         userId: 1,
         shiftId: activeShift?.id,
-        amount: data.amount,
-        category: data.category,
-        description: data.description,
-        receiptImage: data.receiptImage,
+        amount: validated.amount,
+        category: validated.category,
+        description: validated.description,
+        receiptImage: validated.receiptImage,
         expenseDate: new Date()
       }
     })
@@ -38,6 +43,9 @@ export async function createExpense(data: {
     
     return { success: true, expense }
   } catch (error) {
+    if (error instanceof ZodError) {
+      return { error: error.errors[0].message }
+    }
     console.error('Error creating expense:', error)
     return { error: 'Gagal menyimpan perbelanjaan' }
   }
