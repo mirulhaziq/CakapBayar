@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
+import { verifyApiKey } from '@/lib/utils/api-auth';
 
 const WHATSAPP_TOKEN = process.env.META_WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
 const OWNER_WHATSAPP_NUMBER = process.env.META_WHATSAPP_OWNER_NUMBER; // e.g. "60123456789" or "+60123456789"
 
 export async function POST(request) {
+  // Verify API key authentication
+  if (!verifyApiKey(request)) {
+    console.error('❌ [SERVER] Unauthorized API access attempt to notify-whatsapp');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID || !OWNER_WHATSAPP_NUMBER) {
     return NextResponse.json(
       { error: 'WhatsApp credentials not configured' },

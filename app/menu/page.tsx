@@ -189,6 +189,7 @@ export default function MenuPage() {
                           <Switch
                             checked={item.isAvailable}
                             onCheckedChange={() => handleToggleAvailability(item.id)}
+                            className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
                           />
                         </div>
                         <div className="flex gap-2">

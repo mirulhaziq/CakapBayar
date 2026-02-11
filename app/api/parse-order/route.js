@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import Groq from 'groq-sdk';
+import { verifyApiKey } from '@/lib/utils/api-auth';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -96,6 +97,12 @@ Return ONLY valid JSON (no markdown).`;
 }
 
 export async function POST(request) {
+  // Verify API key authentication
+  if (!verifyApiKey(request)) {
+    console.error('❌ [SERVER] Unauthorized API access attempt to parse-order');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  
   try {
     const { transcript, menuItems, currentOrderItems = [], provider } = await request.json();
     

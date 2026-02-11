@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
+import { verifyApiKey } from '@/lib/utils/api-auth';
 
 // Using nodemailer with SMTP credentials
 export async function POST(request) {
+  // Verify API key authentication
+  if (!verifyApiKey(request)) {
+    console.error('❌ [SERVER] Unauthorized API access attempt to notify-email');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const {
     SMTP_HOST,
     SMTP_PORT,

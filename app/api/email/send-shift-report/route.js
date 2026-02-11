@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { generateShiftClosureEmail } from '@/utils/emailTemplates';
+import { verifyApiKey } from '@/lib/utils/api-auth';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 export async function POST(request) {
+  // Verify API key authentication
+  if (!verifyApiKey(request)) {
+    console.error('❌ [SERVER] Unauthorized API access attempt to send-shift-report');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { shiftData, transactions, recipientEmail } = await request.json();
 

@@ -45,18 +45,40 @@ function numberToMalay(n: number): string {
  * Ultra-short phrases so the voice is clear: "[Item]. [Item]. [Total] ringgit."
  * User confirmed "Nasi Ayam" and "Sembilan ringgit" are understandable.
  */
+function formatRinggitForTts(amount: number): string {
+  // Handle decimal amounts like 0.50
+  if (amount < 1 && amount > 0) {
+    const sen = Math.round(amount * 100)
+    if (sen === 50) return 'lima puluh sen'
+    if (sen === 25) return 'dua puluh lima sen'
+    return `${numberToMalay(sen)} sen`
+  }
+  // Handle whole numbers
+  if (Number.isInteger(amount) && amount >= 0 && amount <= 99) {
+    return `${numberToMalay(amount)} ringgit`
+  }
+  // Handle amounts with decimals (e.g., 1.50)
+  const ringgit = Math.floor(amount)
+  const sen = Math.round((amount - ringgit) * 100)
+  if (sen === 0) {
+    return `${numberToMalay(ringgit)} ringgit`
+  } else if (sen === 50) {
+    return `${numberToMalay(ringgit)} ringgit lima puluh sen`
+  } else {
+    return `${numberToMalay(ringgit)} ringgit ${numberToMalay(sen)} sen`
+  }
+}
+
 export function toTtsMalayOrderSummary(
   items: Array<{ name: string; quantity: number }>,
   totalRinggit: number
 ): string {
   if (items.length === 0) return 'Pesanan dikemaskini.'
-  const totalStr = Number.isInteger(totalRinggit) && totalRinggit >= 0 && totalRinggit <= 99
-    ? numberToMalay(totalRinggit)
-    : String(Math.round(totalRinggit))
+  const totalStr = formatRinggitForTts(totalRinggit)
   const itemPhrases = items.map(
     (i) => `${i.name}. ${numberToMalay(i.quantity)}.`
   )
-  return `${itemPhrases.join(' ')} ${totalStr} ringgit.`
+  return `${itemPhrases.join(' ')} ${totalStr}.`
 }
 
 /**
@@ -83,12 +105,10 @@ export function toTtsMalayPaymentConfirmation(
   paymentMethod: string
 ): string {
   if (items.length === 0) return toTtsMalayConfirmOrderSaved()
-  const totalStr = Number.isInteger(totalRinggit) && totalRinggit >= 0 && totalRinggit <= 99
-    ? numberToMalay(totalRinggit)
-    : String(Math.round(totalRinggit))
+  const totalStr = formatRinggitForTts(totalRinggit)
   const paymentLabel = PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod.toLowerCase()
   const itemPhrases = items.map(
     (i) => `${i.name}. ${numberToMalay(i.quantity)}.`
   )
-  return `${itemPhrases.join(' ')} ${totalStr} ringgit. Dibayar dengan ${paymentLabel}. Terima kasih.`
+  return `${itemPhrases.join(' ')} ${totalStr}. Dibayar dengan ${paymentLabel}. Terima kasih.`
 }

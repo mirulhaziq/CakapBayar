@@ -9,7 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import BalanceSheet from '@/components/BalanceSheet'
 import { getTransactionsByDateRange } from '@/lib/actions/transactions'
 import { getExpensesByDateRange } from '@/lib/actions/expenses'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { 
+  getDailySummaries, 
+  getPaymentMethodBreakdown, 
+  getExpenseBreakdown,
+  getTodaySummary 
+} from '@/lib/actions/analytics'
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area
+} from 'recharts'
 import { DollarSign, Receipt, TrendingUp, ArrowRightLeft, Clock } from 'lucide-react'
 import { format, subDays, startOfDay, endOfDay, startOfMonth } from 'date-fns'
 
@@ -31,6 +40,10 @@ interface Expense {
 export default function AnalyticsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [dailySummaries, setDailySummaries] = useState<any[]>([])
+  const [paymentBreakdown, setPaymentBreakdown] = useState<Record<string, number>>({})
+  const [expenseBreakdown, setExpenseBreakdown] = useState<Record<string, number>>({})
+  const [todaySummary, setTodaySummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -46,18 +59,31 @@ export default function AnalyticsPage() {
     try {
       const start = startOfDay(new Date(startDate))
       const end = endOfDay(new Date(endDate))
+      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) || 30
 
-      const [txData, expData] = await Promise.all([
+      const [txData, expData, summaries, payments, expensesByCat, today] = await Promise.all([
         getTransactionsByDateRange(start, end),
         getExpensesByDateRange(start, end),
+        getDailySummaries(Math.min(daysDiff, 30)),
+        getPaymentMethodBreakdown(daysDiff),
+        getExpenseBreakdown(daysDiff),
+        getTodaySummary(),
       ])
 
       setTransactions(Array.isArray(txData) ? txData as any : [])
       setExpenses(Array.isArray(expData) ? expData as any : [])
+      setDailySummaries(Array.isArray(summaries) ? summaries as any : [])
+      setPaymentBreakdown(payments || {})
+      setExpenseBreakdown(expensesByCat || {})
+      setTodaySummary(today)
     } catch (error) {
       console.error('Error loading analytics:', error)
       setTransactions([])
       setExpenses([])
+      setDailySummaries([])
+      setPaymentBreakdown({})
+      setExpenseBreakdown({})
+      setTodaySummary(null)
     }
     setLoading(false)
   }
@@ -108,7 +134,7 @@ export default function AnalyticsPage() {
   const totalTransactions = transactions.length
   const averageOrder = totalTransactions > 0 ? totalSales / totalTransactions : 0
 
-  // Chart data - top selling items by revenue
+  // Chart data - top selling items by revenue (enhanced with quantity)
   const topItemsChart = useMemo(() => {
     const itemMap: Record<string, { name: string; revenue: number; quantity: number }> = {}
     transactions.forEach(t => {
@@ -135,9 +161,94 @@ export default function AnalyticsPage() {
       .slice(0, 10)
       .map(item => ({
         name: item.name,
-        'Jumlah Jualan (RM)': Number(item.revenue.toFixed(2))
+        'Jumlah Jualan (RM)': Number(item.revenue.toFixed(2)),
+        'Kuantiti': item.quantity
       }))
   }, [transactions])
+
+  // Sales trend chart data
+  const salesTrendData = useMemo(() => {
+    return dailySummaries.map(s => ({
+      date: format(new Date(s.summaryDate + 'T00:00:00'), 'dd/MM'),
+      'Jualan (RM)': Number(s.totalSales || 0),
+      'Perbelanjaan (RM)': Number(s.totalExpenses || 0),
+      'Untung (RM)': Number(s.netProfit || 0)
+    }))
+  }, [dailySummaries])
+
+  // Payment methods pie chart data
+  const paymentPieData = useMemo(() => {
+    const colors = { Tunai: '#10b981', Kad: '#f59e0b', 'E-Wallet': '#8b5cf6', 'QR Pay': '#3b82f6' }
+    return Object.entries(paymentBreakdown)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        value: Number(value.toFixed(2)),
+        color: colors[name as keyof typeof colors] || '#6b7280'
+      }))
+  }, [paymentBreakdown])
+
+  // Expense categories pie chart data
+  const expensePieData = useMemo(() => {
+    const colors = [
+      '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16',
+      '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#3b82f6'
+    ]
+    const entries = Object.entries(expenseBreakdown)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value], idx) => ({
+        name,
+        value: Number(value.toFixed(2)),
+        color: colors[idx % colors.length]
+      }))
+    return entries.sort((a, b) => b.value - a.value)
+  }, [expenseBreakdown])
+
+  // Day-to-day comparison data
+  const dayComparisonData = useMemo(() => {
+    if (!todaySummary) return []
+    
+    const today = new Date()
+    const yesterday = subDays(today, 1)
+    const lastWeek = subDays(today, 7)
+    
+    // Get yesterday and last week summaries from dailySummaries
+    const yesterdayStr = format(yesterday, 'yyyy-MM-dd')
+    const lastWeekStr = format(lastWeek, 'yyyy-MM-dd')
+    
+    const yesterdayData = dailySummaries.find(s => s.summaryDate === yesterdayStr)
+    const lastWeekData = dailySummaries.find(s => s.summaryDate === lastWeekStr)
+    
+    return [
+      {
+        hari: 'Hari Ini',
+        'Jualan': Number(todaySummary.totalSales || 0),
+        'Perbelanjaan': Number(todaySummary.totalExpenses || 0),
+        'Untung': Number(todaySummary.netProfit || 0)
+      },
+      {
+        hari: 'Semalam',
+        'Jualan': Number(yesterdayData?.totalSales || 0),
+        'Perbelanjaan': Number(yesterdayData?.totalExpenses || 0),
+        'Untung': Number(yesterdayData?.netProfit || 0)
+      },
+      {
+        hari: 'Minggu Lalu',
+        'Jualan': Number(lastWeekData?.totalSales || 0),
+        'Perbelanjaan': Number(lastWeekData?.totalExpenses || 0),
+        'Untung': Number(lastWeekData?.netProfit || 0)
+      }
+    ]
+  }, [todaySummary, dailySummaries])
+
+  // Cash flow area chart data
+  const cashFlowData = useMemo(() => {
+    return dailySummaries.map(s => ({
+      date: format(new Date(s.summaryDate + 'T00:00:00'), 'dd/MM'),
+      'Wang Masuk (RM)': Number(s.totalSales || 0),
+      'Wang Keluar (RM)': Number(s.totalExpenses || 0)
+    }))
+  }, [dailySummaries])
 
   if (loading) {
     return (
@@ -160,6 +271,7 @@ export default function AnalyticsPage() {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Ringkasan</TabsTrigger>
+          <TabsTrigger value="charts">Graf</TabsTrigger>
           <TabsTrigger value="balance">Lembaran Imbangan</TabsTrigger>
         </TabsList>
 
@@ -269,10 +381,11 @@ export default function AnalyticsPage() {
             </Card>
           </div>
 
-          {/* Top Selling Items Chart */}
+          {/* Top Selling Items Chart - Enhanced */}
           <Card>
             <CardHeader>
               <CardTitle>Item Menu Paling Menguntungkan</CardTitle>
+              <p className="text-sm text-gray-500">Menunjukkan jumlah jualan dan kuantiti terjual</p>
             </CardHeader>
             <CardContent>
               {topItemsChart.length === 0 ? (
@@ -289,11 +402,200 @@ export default function AnalyticsPage() {
                       interval={0}
                       tick={{ fontSize: 12 }}
                     />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="Jumlah Jualan (RM)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="Kuantiti" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="charts" className="space-y-6">
+          {/* Sales Trend Line Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Trend Jualan Mengikut Masa</CardTitle>
+              <p className="text-sm text-gray-500">Perkembangan jualan, perbelanjaan, dan untung dari masa ke masa</p>
+            </CardHeader>
+            <CardContent>
+              {salesTrendData.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Tiada data untuk tempoh ini</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={salesTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
                     <YAxis />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="Jumlah Jualan (RM)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    <Line type="monotone" dataKey="Jualan (RM)" stroke="#3b82f6" strokeWidth={2} />
+                    <Line type="monotone" dataKey="Perbelanjaan (RM)" stroke="#ef4444" strokeWidth={2} />
+                    <Line type="monotone" dataKey="Untung (RM)" stroke="#10b981" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Payment Methods Pie Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Kaedah Pembayaran</CardTitle>
+              <p className="text-sm text-gray-500">Perbandingan kaedah pembayaran yang digunakan pelanggan</p>
+            </CardHeader>
+            <CardContent>
+              {paymentPieData.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Tiada data untuk tempoh ini</p>
+              ) : (
+                <div className="flex flex-col md:flex-row gap-6 items-center">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={paymentPieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {paymentPieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => `RM ${value.toFixed(2)}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-2">
+                    {paymentPieData.map((entry, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ backgroundColor: entry.color }} />
+                        <span className="text-sm">{entry.name}: RM {entry.value.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Expense Categories Pie Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Kategori Perbelanjaan</CardTitle>
+              <p className="text-sm text-gray-500">Perbelanjaan mengikut kategori untuk memahami di mana wang dibelanjakan</p>
+            </CardHeader>
+            <CardContent>
+              {expensePieData.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Tiada perbelanjaan untuk tempoh ini</p>
+              ) : (
+                <div className="flex flex-col md:flex-row gap-6 items-center">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={expensePieData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {expensePieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => `RM ${value.toFixed(2)}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-2">
+                    {expensePieData.map((entry, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded" style={{ backgroundColor: entry.color }} />
+                        <span className="text-sm">{entry.name}: RM {entry.value.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Day-to-Day Comparison Bar Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Perbandingan Hari ke Hari</CardTitle>
+              <p className="text-sm text-gray-500">Bandingkan prestasi hari ini dengan semalam dan minggu lalu</p>
+            </CardHeader>
+            <CardContent>
+              {dayComparisonData.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Tiada data untuk perbandingan</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={dayComparisonData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="hari" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Jualan" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Perbelanjaan" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Untung" fill="#10b981" radius={[4, 4, 0, 0]} />
                   </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Cash Flow Area Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Aliran Tunai</CardTitle>
+              <p className="text-sm text-gray-500">Visualisasi wang masuk (jualan) vs wang keluar (perbelanjaan)</p>
+            </CardHeader>
+            <CardContent>
+              {cashFlowData.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Tiada data untuk tempoh ini</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <AreaChart data={cashFlowData}>
+                    <defs>
+                      <linearGradient id="colorMasuk" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorKeluar" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="Wang Masuk (RM)" 
+                      stroke="#10b981" 
+                      fillOpacity={1} 
+                      fill="url(#colorMasuk)" 
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="Wang Keluar (RM)" 
+                      stroke="#ef4444" 
+                      fillOpacity={1} 
+                      fill="url(#colorKeluar)" 
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </CardContent>

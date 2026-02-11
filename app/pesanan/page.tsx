@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Mic, Plus, Minus, Trash2, Banknote, CreditCard, Smartphone, QrCode, Lock, Volume2 } from 'lucide-react'
@@ -98,15 +98,23 @@ export default function PesananPage() {
     setOrderItems(orderItems.filter(oi => oi.item.id !== itemId))
   }
 
-  const subtotal = orderItems.reduce((sum, oi) => sum + (Number(oi.item.price) * oi.quantity), 0)
+  // Memoize calculations for better performance
+  const subtotal = useMemo(() => 
+    orderItems.reduce((sum, oi) => sum + (Number(oi.item.price) * oi.quantity), 0),
+    [orderItems]
+  )
   const total = subtotal
 
   // --- ElevenLabs TTS: speak order summary ---
   async function speakOrderSummary(text: string) {
     try {
+      const apiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY || localStorage.getItem('internal_api_key') || ''
       const res = await fetch('/api/text-to-speech', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey
+        },
         body: JSON.stringify({ text }),
       })
 
@@ -161,6 +169,9 @@ export default function PesananPage() {
   async function processVoiceOrder(audioBlob: Blob) {
     setIsProcessingVoice(true)
     try {
+      // Get API key once for this function
+      const apiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY || localStorage.getItem('internal_api_key') || ''
+      
       // Step 1: Transcribe audio using Groq Whisper
       const formData = new FormData()
       // FIXED: API expects 'file' field, not 'audio'. Also add filename for proper MIME detection.
@@ -168,6 +179,9 @@ export default function PesananPage() {
 
       const transcribeRes = await fetch('/api/transcribe', {
         method: 'POST',
+        headers: {
+          'x-api-key': apiKey
+        },
         body: formData,
       })
 
@@ -201,7 +215,10 @@ export default function PesananPage() {
 
       const parseRes = await fetch('/api/parse-order', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey
+        },
         body: JSON.stringify({
           transcript: text,
           menuItems,
@@ -236,9 +253,9 @@ export default function PesananPage() {
         const toAdd = parsed.actions.add && Array.isArray(parsed.actions.add) ? parsed.actions.add : []
 
         const removeNames = new Set(toRemove.map((r: { name?: string }) => r.name?.toLowerCase().trim()).filter(Boolean))
-        const updateMap = new Map(
+        const updateMap = new Map<string, number>(
           toUpdate
-            .map((u: { name?: string; quantity?: number }) => [u.name?.toLowerCase().trim(), Math.max(1, Number(u.quantity) || 1)] as const)
+            .map((u: { name?: string; quantity?: number }) => [u.name?.toLowerCase().trim(), Math.max(1, Number(u.quantity) || 1)] as [string, number])
             .filter(([k]) => k)
         )
         const newOrderItemsFromAdd: OrderItem[] = []
@@ -267,8 +284,8 @@ export default function PesananPage() {
               next = next.map(oi => {
                 const nameMalay = oi.item.nameMalay?.toLowerCase().trim()
                 const name = oi.item.name?.toLowerCase().trim()
-                const newQty = updateMap.get(nameMalay) ?? updateMap.get(name)
-                if (newQty !== undefined) return { ...oi, quantity: newQty }
+                const newQty = (updateMap.get(nameMalay) ?? updateMap.get(name)) as number | undefined
+                if (newQty !== undefined && typeof newQty === 'number') return { ...oi, quantity: newQty }
                 return oi
               })
             }
@@ -298,7 +315,7 @@ export default function PesananPage() {
             const total = Number(parsed.total) || 0
             const speechText = toTtsMalayOrderSummary(
               summaryItems.map((i: any) => ({ name: i.name || '', quantity: Number(i.quantity) || 1 })),
-              Math.round(total)
+              total
             )
             speakOrderSummary(speechText)
           }
@@ -340,7 +357,7 @@ export default function PesananPage() {
             const totalAmt = newOrderItems.reduce((sum, oi) => sum + Number(oi.item.price) * oi.quantity, 0)
             const speechText = toTtsMalayOrderSummary(
               newOrderItems.map(oi => ({ name: oi.item.nameMalay, quantity: oi.quantity })),
-              Math.round(totalAmt)
+              totalAmt
             )
             speakOrderSummary(speechText)
           } else {
@@ -395,7 +412,7 @@ export default function PesananPage() {
       toast.success('Pesanan berjaya disimpan!')
       const paymentSummary = toTtsMalayPaymentConfirmation(
         orderItems.map(oi => ({ name: oi.item.nameMalay, quantity: oi.quantity })),
-        Math.round(total),
+        total,
         paymentMethod
       )
       speakOrderSummary(paymentSummary)
@@ -566,8 +583,8 @@ export default function PesananPage() {
                         onClick={() => setPaymentMethod(method.id)}
                         className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${
                           paymentMethod === method.id
-                            ? 'border-blue-500 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                            ? 'border-blue-500 bg-blue-500 text-white shadow-md'
+                            : 'border-gray-300 bg-gray-900 text-gray-300 hover:bg-gray-800'
                         }`}
                       >
                         <method.icon className="h-5 w-5" />

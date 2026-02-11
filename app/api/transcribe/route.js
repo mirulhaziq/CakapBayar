@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
+import { verifyApiKey } from '@/lib/utils/api-auth';
 
 export async function POST(request) {
   console.log('🔵 [SERVER] Transcription API called (Groq)');
+  
+  // Verify API key authentication
+  if (!verifyApiKey(request)) {
+    console.error('❌ [SERVER] Unauthorized API access attempt');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   
   try {
     // Check if API key is configured FIRST

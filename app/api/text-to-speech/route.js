@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
+import { verifyApiKey } from '@/lib/utils/api-auth';
 
 export async function POST(request) {
+  // Verify API key authentication
+  if (!verifyApiKey(request)) {
+    console.error('❌ [SERVER] Unauthorized API access attempt to text-to-speech');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  
   try {
     const { text } = await request.json();
     

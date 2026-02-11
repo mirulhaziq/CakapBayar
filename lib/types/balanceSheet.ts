@@ -1,14 +1,42 @@
+/** Snapshot of balance sheet totals for comparison (e.g. previous month) */
+export interface BalanceSheetPeriodSnapshot {
+  assets: {
+    current: { cash: number; accountsReceivable: number; inventory: number; total: number }
+    nonCurrent: { equipment: number; property: number; total: number }
+    total: number
+  }
+  liabilities: {
+    current: { accountsPayable: number; shortTermLoans: number; total: number }
+    nonCurrent: { longTermLoans: number; total: number }
+    total: number
+  }
+  equity: { openingCapital: number; retainedEarnings: number; total: number }
+  incomeStatement: {
+    revenue: { total: number; byPaymentMethod: Record<string, number> }
+    expenses: { total: number; byCategory: Record<string, number> }
+    netIncome: number
+  }
+}
+
 export interface BalanceSheetData {
   period: {
     year: number
     month: number
     startDate: string
     endDate: string
+    asOfDate: string
   }
+  businessName?: string
   assets: {
     current: {
       cash: number
       accountsReceivable: number
+      inventory: number
+      total: number
+    }
+    nonCurrent: {
+      equipment: number
+      property: number
       total: number
     }
     total: number
@@ -16,30 +44,37 @@ export interface BalanceSheetData {
   liabilities: {
     current: {
       accountsPayable: number
+      shortTermLoans: number
+      total: number
+    }
+    nonCurrent: {
+      longTermLoans: number
       total: number
     }
     total: number
   }
   equity: {
+    openingCapital: number
     retainedEarnings: number
     total: number
   }
-  revenue: {
-    sales: {
-      cash: number
-      card: number
-      ewallet: number
-      qr: number
+  balances: boolean
+  difference: number
+  incomeStatement: {
+    revenue: {
       total: number
+      byPaymentMethod: Record<string, number>
     }
-    total: number
+    expenses: {
+      total: number
+      byCategory: Record<string, number>
+    }
+    netIncome: number
   }
-  expenses: {
-    byCategory: Record<string, number>
-    total: number
-  }
-  netIncome: number
   transactionCount: number
+  shiftCount: number
+  /** Previous month data for comparison (current vs previous, change) */
+  previousPeriod?: BalanceSheetPeriodSnapshot
 }
 
 export interface MonthlyBalanceSheet {
@@ -52,4 +87,5 @@ export interface MonthlyBalanceSheet {
   totalAssets: number
   totalLiabilities: number
   totalEquity: number
+  balances: boolean
 }
