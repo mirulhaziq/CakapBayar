@@ -76,14 +76,17 @@ export function middleware(request: NextRequest) {
     const apiKey = request.headers.get('x-api-key')
     const expectedApiKey = process.env.INTERNAL_API_KEY
 
-    // Skip auth check if API key is not configured (development mode)
-    if (expectedApiKey) {
-      if (!apiKey || apiKey !== expectedApiKey) {
+    if (expectedApiKey && (!apiKey || apiKey !== expectedApiKey)) {
+      // Allow same-origin requests so in-app TTS/transcribe work even if key isn't sent
+      const referer = request.headers.get('referer') || ''
+      const origin = request.headers.get('origin') || ''
+      const requestOrigin = request.nextUrl.origin
+      const fromOwnApp =
+        (referer && referer.startsWith(requestOrigin)) ||
+        origin === requestOrigin
+      if (!fromOwnApp) {
         return NextResponse.json(
-          { 
-            error: 'Unauthorized',
-            message: 'Invalid or missing API key. Include x-api-key header.'
-          },
+          { error: 'Unauthorized', message: 'Invalid or missing API key. Include x-api-key header.' },
           { status: 401 }
         )
       }

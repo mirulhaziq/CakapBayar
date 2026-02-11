@@ -6,17 +6,16 @@
  */
 
 export function verifyApiKey(request: Request): boolean {
-  // Check for API key in headers
-  const apiKey = 
-    request.headers.get('x-api-key') || 
+  const apiKey =
+    request.headers.get('x-api-key') ||
     request.headers.get('authorization')?.replace('Bearer ', '') ||
     request.headers.get('authorization')?.replace('bearer ', '')
 
   const expectedKey = process.env.INTERNAL_API_KEY
 
+  // When no key is configured, allow requests (e.g. Vercel env not set or same-origin app)
   if (!expectedKey) {
-    console.error('INTERNAL_API_KEY not configured in environment variables')
-    return false
+    return true
   }
 
   return apiKey === expectedKey
