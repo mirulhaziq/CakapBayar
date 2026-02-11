@@ -105,10 +105,17 @@ export default function PesananPage() {
   )
   const total = subtotal
 
+  // Use runtime-injected key (from layout) so Vercel works without redeploy; fallback to build-time or localStorage
+  const getApiKey = () =>
+    (typeof window !== 'undefined' && (window as unknown as { __CB_API_KEY__?: string }).__CB_API_KEY__) ||
+    process.env.NEXT_PUBLIC_INTERNAL_API_KEY ||
+    (typeof window !== 'undefined' ? localStorage.getItem('internal_api_key') : null) ||
+    ''
+
   // --- ElevenLabs TTS: speak order summary ---
   async function speakOrderSummary(text: string) {
     try {
-      const apiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY || localStorage.getItem('internal_api_key') || ''
+      const apiKey = getApiKey()
       const res = await fetch('/api/text-to-speech', {
         method: 'POST',
         headers: { 
@@ -120,6 +127,9 @@ export default function PesananPage() {
 
       if (!res.ok) {
         console.warn('TTS failed:', res.status)
+        if (res.status === 401) {
+          toast.error('TTS: Kunci API tidak sah. Pastikan INTERNAL_API_KEY dan NEXT_PUBLIC_INTERNAL_API_KEY diset di Vercel, kemudian redeploy.')
+        }
         return
       }
 
@@ -170,7 +180,7 @@ export default function PesananPage() {
     setIsProcessingVoice(true)
     try {
       // Get API key once for this function
-      const apiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY || localStorage.getItem('internal_api_key') || ''
+      const apiKey = getApiKey()
       
       // Step 1: Transcribe audio using Groq Whisper
       const formData = new FormData()
@@ -187,7 +197,10 @@ export default function PesananPage() {
 
       if (!transcribeRes.ok) {
         const errData = await transcribeRes.json().catch(() => ({}))
-        toast.error(errData.error || 'Gagal mentranskripsikan audio')
+        const msg = transcribeRes.status === 401
+          ? 'Transkripsi: Kunci API tidak sah. Pastikan INTERNAL_API_KEY dan NEXT_PUBLIC_INTERNAL_API_KEY diset di Vercel, kemudian redeploy.'
+          : (errData.error || 'Gagal mentranskripsikan audio')
+        toast.error(msg)
         setIsProcessingVoice(false)
         return
       }

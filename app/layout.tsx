@@ -27,9 +27,20 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Inject API key at runtime so production works without redeploy when env is set
+  const apiKey =
+    typeof process !== 'undefined'
+      ? (process.env.INTERNAL_API_KEY || process.env.NEXT_PUBLIC_INTERNAL_API_KEY || '')
+      : ''
+  const escapedKey = apiKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '')
   return (
     <html lang="ms">
       <body className={inter.className}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__CB_API_KEY__="${escapedKey}";`,
+          }}
+        />
         <div className="min-h-screen bg-gray-50">
           <Sidebar />
           <div className="lg:pl-64">
