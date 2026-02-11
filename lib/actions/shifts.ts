@@ -2,6 +2,8 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { OpenShiftSchema } from '@/lib/validation/schemas'
+import { ZodError } from 'zod'
 
 // Convert Prisma Decimal/Date objects to plain JS types
 function serialize<T>(data: T): T {
@@ -14,6 +16,9 @@ function serialize<T>(data: T): T {
 
 export async function openShift(openingCash: number) {
   try {
+    // Validate input
+    const validated = OpenShiftSchema.parse({ openingCash })
+    
     // Check if there's already an active shift
     const activeShift = await prisma.shift.findFirst({
       where: {
@@ -30,7 +35,7 @@ export async function openShift(openingCash: number) {
       data: {
         userId: 1,
         openedAt: new Date(),
-        openingCash,
+        openingCash: validated.openingCash,
         status: 'active'
       }
     })
@@ -38,6 +43,9 @@ export async function openShift(openingCash: number) {
     revalidatePath('/shift')
     return { success: true, shift: serialize(shift) }
   } catch (error) {
+    if (error instanceof ZodError) {
+      return { error: error.errors[0].message }
+    }
     console.error('Error opening shift:', error)
     return { error: 'Gagal membuka shift' }
   }
@@ -45,9 +53,13 @@ export async function openShift(openingCash: number) {
 
 export async function closeShift(shiftId: number, closingCash: number, notes?: string) {
   try {
+    // Validate input
+    const { CloseShiftSchema } = await import('@/lib/validation/schemas')
+    const validated = CloseShiftSchema.parse({ shiftId, closingCash, notes })
+    
     // Get shift with all transactions and expenses
     const shift = await prisma.shift.findUnique({
-      where: { id: shiftId },
+      where: { id: validated.shiftId },
       include: {
         transactions: true,
         expenses: true

@@ -2,6 +2,8 @@
 
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
+import { CreateTransactionSchema } from '@/lib/validation/schemas'
+import { ZodError } from 'zod'
 
 // Convert Prisma Decimal/Date objects to plain JS types
 function serialize<T>(data: T): T {
@@ -23,6 +25,9 @@ export async function createTransaction(data: {
   notes?: string
 }) {
   try {
+    // Validate input
+    const validated = CreateTransactionSchema.parse(data)
+    
     // Get active shift
     const activeShift = await prisma.shift.findFirst({
       where: {
@@ -35,14 +40,14 @@ export async function createTransaction(data: {
       data: {
         userId: 1,
         shiftId: activeShift?.id,
-        items: data.items,
-        subtotal: data.subtotal,
-        tax: data.tax,
-        total: data.total,
-        paymentMethod: data.paymentMethod,
-        paymentReceived: data.paymentReceived,
-        changeGiven: data.changeGiven,
-        notes: data.notes,
+        items: validated.items,
+        subtotal: validated.subtotal,
+        tax: validated.tax,
+        total: validated.total,
+        paymentMethod: validated.paymentMethod,
+        paymentReceived: validated.paymentReceived,
+        changeGiven: validated.changeGiven,
+        notes: validated.notes,
         transactionDate: new Date()
       }
     })
@@ -56,6 +61,9 @@ export async function createTransaction(data: {
     
     return { success: true, transaction: serialize(transaction) }
   } catch (error) {
+    if (error instanceof ZodError) {
+      return { error: error.errors[0].message }
+    }
     console.error('Error creating transaction:', error)
     return { error: 'Gagal menyimpan transaksi' }
   }
