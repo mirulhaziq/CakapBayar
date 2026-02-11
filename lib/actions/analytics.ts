@@ -156,10 +156,10 @@ export async function getTopSellingItems(days = 7) {
 
     const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {}
 
+    type ItemShape = { name: string; price: number; quantity: number }
     transactions.forEach(t => {
       const rawItems = t.items
-      const items: Array<{ name: string; price: number; quantity: number }> =
-        Array.isArray(rawItems) ? rawItems : []
+      const items: ItemShape[] = (Array.isArray(rawItems) ? rawItems : []) as ItemShape[]
       items.forEach(item => {
         if (!item || !item.name) return
         if (!itemCounts[item.name]) {
