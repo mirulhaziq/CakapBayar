@@ -44,6 +44,7 @@ export default function PesananPage() {
   const [lastTranscript, setLastTranscript] = useState('')
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const apiKeyRef = useRef<string | null>(null)
 
   // Sync AI provider from localStorage (set in Tetapan page)
   useEffect(() => {
@@ -105,17 +106,32 @@ export default function PesananPage() {
   )
   const total = subtotal
 
-  // Use runtime-injected key (from layout) so Vercel works without redeploy; fallback to build-time or localStorage
-  const getApiKey = () =>
-    (typeof window !== 'undefined' && (window as unknown as { __CB_API_KEY__?: string }).__CB_API_KEY__) ||
-    process.env.NEXT_PUBLIC_INTERNAL_API_KEY ||
-    (typeof window !== 'undefined' ? localStorage.getItem('internal_api_key') : null) ||
-    ''
+  // Fetch key from server at runtime (works on Vercel; layout injection is static at build time)
+  async function getApiKey(): Promise<string> {
+    if (apiKeyRef.current) return apiKeyRef.current
+    try {
+      const res = await fetch('/api/get-api-key')
+      if (res.ok) {
+        const { apiKey } = await res.json()
+        if (apiKey) {
+          apiKeyRef.current = apiKey
+          return apiKey
+        }
+      }
+    } catch (_) { /* ignore */ }
+    const fallback =
+      (typeof window !== 'undefined' && (window as unknown as { __CB_API_KEY__?: string }).__CB_API_KEY__) ||
+      process.env.NEXT_PUBLIC_INTERNAL_API_KEY ||
+      (typeof window !== 'undefined' ? localStorage.getItem('internal_api_key') : null) ||
+      ''
+    if (fallback) apiKeyRef.current = fallback
+    return fallback
+  }
 
   // --- ElevenLabs TTS: speak order summary ---
   async function speakOrderSummary(text: string) {
     try {
-      const apiKey = getApiKey()
+      const apiKey = await getApiKey()
       const res = await fetch('/api/text-to-speech', {
         method: 'POST',
         headers: { 
@@ -179,8 +195,7 @@ export default function PesananPage() {
   async function processVoiceOrder(audioBlob: Blob) {
     setIsProcessingVoice(true)
     try {
-      // Get API key once for this function
-      const apiKey = getApiKey()
+      const apiKey = await getApiKey()
       
       // Step 1: Transcribe audio using Groq Whisper
       const formData = new FormData()

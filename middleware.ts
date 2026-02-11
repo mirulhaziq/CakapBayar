@@ -44,8 +44,9 @@ setInterval(() => {
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // Only protect API routes (skip auth for public check endpoint)
-  if (pathname.startsWith('/api/') && pathname !== '/api/check-env') {
+  // Only protect API routes (skip auth for public endpoints)
+  const publicApiPaths = ['/api/check-env', '/api/get-api-key']
+  if (pathname.startsWith('/api/') && !publicApiPaths.includes(pathname)) {
     // Get identifier (IP address or forwarded IP)
     const identifier = 
       request.headers.get('x-forwarded-for')?.split(',')[0] ||
