@@ -156,6 +156,7 @@ export async function getTopSellingItems(days = 7) {
 
     const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {}
 
+    // Prisma returns items as JsonValue; cast to typed array for TypeScript
     type ItemShape = { name: string; price: number; quantity: number }
     transactions.forEach(t => {
       const rawItems = t.items
