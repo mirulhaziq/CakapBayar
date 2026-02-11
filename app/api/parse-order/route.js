@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
 // Safely parse JSON from the model (handles stray text/code fences)
@@ -12,19 +17,8 @@ function safeJsonParse(text) {
   return JSON.parse(match[0]);
 }
 
-export async function POST(request) {
-  try {
-    const { transcript, menuItems, currentOrderItems = [] } = await request.json();
-    
-    const menuReference = menuItems.map(item => 
-      `${item.name}: RM${item.price.toFixed(2)} (aliases: ${item.aliases.join(', ')})`
-    ).join('\n');
-
-    const currentOrderRef = currentOrderItems.length
-      ? currentOrderItems.map(i => `${i.quantity} x ${i.name}`).join('; ')
-      : 'Tiada (empty)';
-
-    const prompt = `
+function buildPrompt(menuReference, transcript, currentOrderRef) {
+  return `
 You are a Malaysian food stall order processing AI.
 
 MENU:
@@ -48,9 +42,18 @@ Smart disambiguation rules to reduce false ambiguities:
 5) If a single generic word matches multiple items (e.g., "mango"), keep it ambiguous.
 6) Preserve requestedQuantity even when ambiguous.
 7) When confidence is split within 10% among multiple items, treat as ambiguous.
-8) Quantity adjustments: detect phrases like "make it X", "change to X", "add X more", "plus X".
-9) Removals: detect "cancel", "remove", "tak nak", "tolak" and list items to remove.
-10) Use CURRENT ORDER context to apply updates/removals sensibly.
+8) Removals: detect "cancel", "remove", "tak nak", "tolak" and list items to remove.
+9) Use CURRENT ORDER context to apply updates/removals sensibly.
+
+CRITICAL - "sahaja" / "only" / "just" (change of mind):
+- "satu nasi ayam sahaja" or "nak satu nasi ayam sahaja" or "maaf saya nak satu nasi ayam sahaja" = customer wants ONLY that item with that quantity. You MUST: (1) update: [{"name": "Nasi Ayam", "quantity": 1}], (2) remove: [list every OTHER item in CURRENT ORDER only]. Never put the item the customer wants in "remove". Remove only the other items so the cart ends up with just that one item at that quantity.
+
+CRITICAL - Quantity semantics (must follow exactly):
+- actions.add: quantity = HOW MANY TO ADD (delta only). Never use the new total.
+  Example: CURRENT ORDER has "2 x Nasi Ayam". User says "tambah lagi 2 nasi ayam" → add: [{"name": "Nasi Ayam", "quantity": 2}]. Result: 4 nasi ayam. So actions.add quantity is 2 (what to add), not 4.
+  Example: User says "lagi satu teh tarik" → add: [{"name": "Teh Tarik", "quantity": 1}].
+- actions.update: quantity = NEW TOTAL for that item. Example: "ubah kepada 3" → update: [{"name": "...", "quantity": 3}].
+- "items" = full order state AFTER applying actions (for TTS/display). E.g. after adding 2 nasi ayam to existing 2, items: [{"name": "Nasi Ayam", "quantity": 4, "price": ...}].
 
 Return format:
 
@@ -64,7 +67,7 @@ If CLEAR (one obvious match):
     "update": [{"name": string, "quantity": number, "price": number}],
     "remove": [{"name": string}]
   },
-  "confirmations": [string] // e.g., "Dikemaskini: 3 Teh Tarik"
+  "confirmations": [string]
 }
 
 If AMBIGUOUS (multiple possible matches):
@@ -90,14 +93,44 @@ If AMBIGUOUS (multiple possible matches):
 
 Be STRICT about ambiguity detection—but avoid false positives by applying the smart rules above.
 Return ONLY valid JSON (no markdown).`;
+}
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }]
-    });
+export async function POST(request) {
+  try {
+    const { transcript, menuItems, currentOrderItems = [], provider } = await request.json();
+    
+    const menuReference = menuItems.map(item => 
+      `${item.name}: RM${Number(item.price).toFixed(2)} (aliases: ${Array.isArray(item.aliases) ? item.aliases.join(', ') : ''})`
+    ).join('\n');
 
-    const responseText = message.content[0].text;
+    const currentOrderRef = currentOrderItems.length
+      ? currentOrderItems.map(i => `${i.quantity} x ${i.name}`).join('; ')
+      : 'Tiada (empty)';
+
+    const prompt = buildPrompt(menuReference, transcript, currentOrderRef);
+
+    // Choose provider based on request (default to anthropic)
+    const useGroq = provider === 'groq';
+
+    let responseText;
+
+    if (useGroq) {
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2048,
+        temperature: 0.1,
+      });
+      responseText = completion.choices[0]?.message?.content || '';
+    } else {
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      responseText = message.content[0].text;
+    }
+
     const parsed = safeJsonParse(responseText);
 
     return NextResponse.json(parsed);

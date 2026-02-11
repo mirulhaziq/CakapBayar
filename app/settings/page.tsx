@@ -1,14 +1,30 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Settings, Bell, User, Database } from 'lucide-react'
+import { Settings, Bell, User, Database, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SettingsPage() {
+  const [aiProvider, setAiProvider] = useState<'anthropic' | 'groq'>('anthropic')
+
+  useEffect(() => {
+    const saved = localStorage.getItem('ai_provider')
+    if (saved === 'groq' || saved === 'anthropic') {
+      setAiProvider(saved)
+    }
+  }, [])
+
+  function handleProviderChange(provider: 'anthropic' | 'groq') {
+    setAiProvider(provider)
+    localStorage.setItem('ai_provider', provider)
+    toast.success(`AI provider ditukar ke ${provider === 'anthropic' ? 'Anthropic Claude' : 'Groq AI'}`)
+  }
+
   function handleSave() {
     toast.success('Tetapan berjaya disimpan')
   }
@@ -20,7 +36,39 @@ export default function SettingsPage() {
         <p className="text-gray-500 mt-1">Urus tetapan aplikasi anda</p>
       </div>
 
+      {/* AI Provider Toggle */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Bot className="h-5 w-5 text-gray-500" />
+              <div>
+                <p className="font-medium text-gray-900">AI Provider</p>
+                {aiProvider === 'anthropic' ? (
+                  <p className="text-sm text-gray-500">
+                    <span className="font-medium text-gray-700">Anthropic Claude</span> — menggunakan model <span className="font-medium">Claude Sonnet 4</span>. Lebih tepat untuk pesanan kompleks.
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    <span className="font-medium text-gray-700">Groq AI</span> — menggunakan model <span className="font-medium">Meta LLaMA 3.3 70B Versatile</span>. Lebih pantas & percuma.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 ml-4">
+              <span className={`text-xs font-medium ${aiProvider === 'groq' ? 'text-blue-600' : 'text-gray-400'}`}>Groq</span>
+              <Switch
+                checked={aiProvider === 'anthropic'}
+                onCheckedChange={(checked) => handleProviderChange(checked ? 'anthropic' : 'groq')}
+              />
+              <span className={`text-xs font-medium ${aiProvider === 'anthropic' ? 'text-blue-600' : 'text-gray-400'}`}>Claude</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 md:grid-cols-2">
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">

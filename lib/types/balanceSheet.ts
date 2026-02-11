@@ -2,8 +2,8 @@ export interface BalanceSheetData {
   period: {
     year: number
     month: number
-    startDate: Date
-    endDate: Date
+    startDate: string
+    endDate: string
   }
   assets: {
     current: {
@@ -45,7 +45,7 @@ export interface BalanceSheetData {
 export interface MonthlyBalanceSheet {
   year: number
   month: number
-  date: Date
+  date: string
   totalRevenue: number
   totalExpenses: number
   netIncome: number

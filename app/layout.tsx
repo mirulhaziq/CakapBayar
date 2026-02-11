@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
@@ -7,15 +7,18 @@ import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
+};
+
 export const metadata: Metadata = {
-  title: "CakapNBayar - Voice-Powered POS System",
+  title: "CakapBayar - Voice POS System",
   description: "Sistem POS berkuasa suara untuk perniagaan Malaysia",
   manifest: "/manifest.json",
-  themeColor: "#2563eb",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "CakapNBayar",
+    title: "CakapBayar",
   },
 };
 

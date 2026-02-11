@@ -18,6 +18,7 @@ interface MenuItem {
   nameMalay: string
   price: number
   category: string
+  aliases: string[]
   isAvailable: boolean
 }
 
@@ -31,7 +32,8 @@ export default function MenuPage() {
     name: '',
     nameMalay: '',
     price: '',
-    category: 'Makanan'
+    category: 'Makanan',
+    aliases: ''
   })
 
   useEffect(() => {
@@ -48,11 +50,13 @@ export default function MenuPage() {
   function openDialog(item?: MenuItem) {
     if (item) {
       setEditingItem(item)
+      const aliasArr = Array.isArray(item.aliases) ? item.aliases : []
       setFormData({
         name: item.name,
         nameMalay: item.nameMalay,
-        price: item.price.toString(),
-        category: item.category
+        price: String(Number(item.price)),
+        category: item.category,
+        aliases: aliasArr.join(', ')
       })
     } else {
       setEditingItem(null)
@@ -60,7 +64,8 @@ export default function MenuPage() {
         name: '',
         nameMalay: '',
         price: '',
-        category: 'Makanan'
+        category: 'Makanan',
+        aliases: ''
       })
     }
     setIsDialogOpen(true)
@@ -72,11 +77,16 @@ export default function MenuPage() {
       return
     }
 
+    const aliases = formData.aliases
+      ? formData.aliases.split(',').map(a => a.trim()).filter(a => a)
+      : []
+
     const data = {
       name: formData.name,
       nameMalay: formData.nameMalay,
       price: parseFloat(formData.price),
-      category: formData.category
+      category: formData.category,
+      aliases
     }
 
     let result
@@ -96,9 +106,7 @@ export default function MenuPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('Adakah anda pasti untuk memadam item ini?')) {
-      return
-    }
+    if (!confirm('Adakah anda pasti untuk memadam item ini?')) return
 
     const result = await deleteMenuItem(id)
     if (result.error) {
@@ -132,123 +140,152 @@ export default function MenuPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Pengurusan Menu</h1>
-          <p className="text-gray-500 mt-1">Urus item menu anda</p>
+          <p className="text-sm text-gray-500">Pengurusan</p>
+          <h1 className="text-3xl font-bold text-gray-900">Menu</h1>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => openDialog()}>
-              <Plus className="mr-2 h-4 w-4" />
-              Tambah Item
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editingItem ? 'Edit Item' : 'Tambah Item Baru'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Nama (English)</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Nasi Lemak"
-                />
-              </div>
-              <div>
-                <Label>Nama (Malay)</Label>
-                <Input
-                  value={formData.nameMalay}
-                  onChange={(e) => setFormData({ ...formData, nameMalay: e.target.value })}
-                  placeholder="Nasi Lemak"
-                />
-              </div>
-              <div>
-                <Label>Harga (RM)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  placeholder="5.00"
-                />
-              </div>
-              <div>
-                <Label>Kategori</Label>
-                <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Makanan">Makanan</SelectItem>
-                    <SelectItem value="Minuman">Minuman</SelectItem>
-                    <SelectItem value="Kuih">Kuih</SelectItem>
-                    <SelectItem value="Lain-lain">Lain-lain</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button onClick={handleSubmit} className="w-full">
-                {editingItem ? 'Kemaskini' : 'Tambah'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => openDialog()}>
+          <Plus className="mr-2 h-4 w-4" />
+          Tambah Item
+        </Button>
       </div>
 
+      {/* Menu Items by Category */}
       <div className="space-y-6">
-        {categories.map(category => (
-          <Card key={category}>
-            <CardHeader>
-              <CardTitle>{category}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {menuItems
-                  .filter(item => item.category === category)
-                  .map(item => (
-                    <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex-1">
-                        <p className="font-medium">{item.nameMalay}</p>
-                        <p className="text-sm text-gray-500">RM {Number(item.price).toFixed(2)}</p>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-2">
-                          <Label htmlFor={`available-${item.id}`} className="text-sm">
-                            {item.isAvailable ? 'Tersedia' : 'Habis'}
-                          </Label>
+        {categories.map(category => {
+          const catItems = menuItems.filter(item => item.category === category)
+          return (
+            <Card key={category}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  {category}
+                  <span className="text-sm font-normal text-gray-400">{catItems.length}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {catItems.map(item => {
+                    const aliasArr = Array.isArray(item.aliases) ? item.aliases : []
+                    const aliasStr = aliasArr.length > 0
+                      ? 'Alias: ' + aliasArr.join(', ')
+                      : ''
+
+                    return (
+                      <div key={item.id} className="border rounded-xl p-4 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold">{item.nameMalay}</h3>
+                            <p className="text-lg font-bold text-blue-600">
+                              RM {Number(item.price).toFixed(2)}
+                            </p>
+                            {aliasStr && (
+                              <p className="text-xs text-gray-400 mt-1 truncate" title={aliasStr}>
+                                {aliasStr}
+                              </p>
+                            )}
+                          </div>
                           <Switch
-                            id={`available-${item.id}`}
                             checked={item.isAvailable}
                             onCheckedChange={() => handleToggleAvailability(item.id)}
                           />
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openDialog(item)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(item.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => openDialog(item)}
+                          >
+                            <Edit className="mr-1 h-3 w-3" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(item.id)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingItem ? 'Edit Item' : 'Tambah Item Baru'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Nama (English)</Label>
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Nasi Lemak"
+              />
+            </div>
+            <div>
+              <Label>Nama (Malay)</Label>
+              <Input
+                value={formData.nameMalay}
+                onChange={(e) => setFormData({ ...formData, nameMalay: e.target.value })}
+                placeholder="Nasi Lemak"
+              />
+            </div>
+            <div>
+              <Label>Harga (RM)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                placeholder="5.00"
+              />
+            </div>
+            <div>
+              <Label>Kategori</Label>
+              <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Makanan">Makanan</SelectItem>
+                  <SelectItem value="Minuman">Minuman</SelectItem>
+                  <SelectItem value="Kuih">Kuih</SelectItem>
+                  <SelectItem value="Lain-lain">Lain-lain</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Alias (pisahkan dengan koma)</Label>
+              <Input
+                value={formData.aliases}
+                onChange={(e) => setFormData({ ...formData, aliases: e.target.value })}
+                placeholder="nasi lemak, nasik lemak"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Nama alternatif untuk pengecaman suara
+              </p>
+            </div>
+            <Button onClick={handleSubmit} className="w-full">
+              {editingItem ? 'Kemaskini' : 'Tambah'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,68 +1,143 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import BalanceSheet from '@/components/BalanceSheet'
-import { getDailySummaries, getTopSellingItems, getPaymentMethodBreakdown, getExpenseBreakdown } from '@/lib/actions/analytics'
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { TrendingUp, TrendingDown, DollarSign, ShoppingBag } from 'lucide-react'
+import { getTransactionsByDateRange } from '@/lib/actions/transactions'
+import { getExpensesByDateRange } from '@/lib/actions/expenses'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { DollarSign, Receipt, TrendingUp, ArrowRightLeft, Clock } from 'lucide-react'
+import { format, subDays, startOfDay, endOfDay, startOfMonth } from 'date-fns'
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899']
+interface Transaction {
+  id: number
+  items: Array<{ name: string; price: number; quantity: number }>
+  total: number
+  paymentMethod: string
+  transactionDate: string | Date
+}
+
+interface Expense {
+  id: number
+  amount: number
+  category: string
+  expenseDate: string | Date
+}
 
 export default function AnalyticsPage() {
-  const [summaries, setSummaries] = useState<any[]>([])
-  const [topItems, setTopItems] = useState<any[]>([])
-  const [paymentBreakdown, setPaymentBreakdown] = useState<any>({})
-  const [expenseBreakdown, setExpenseBreakdown] = useState<any>({})
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
-  const [period, setPeriod] = useState('7')
+  const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'))
+  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [balanceSheetMonth, setBalanceSheetMonth] = useState(new Date().getMonth() + 1)
   const [balanceSheetYear, setBalanceSheetYear] = useState(new Date().getFullYear())
 
   useEffect(() => {
     loadAnalytics()
-  }, [period])
+  }, [])
 
   async function loadAnalytics() {
     setLoading(true)
-    const days = parseInt(period)
-    const [summariesData, topItemsData, paymentData, expenseData] = await Promise.all([
-      getDailySummaries(days),
-      getTopSellingItems(days),
-      getPaymentMethodBreakdown(days),
-      getExpenseBreakdown(days)
-    ])
-    
-    setSummaries(summariesData)
-    setTopItems(topItemsData)
-    setPaymentBreakdown(paymentData)
-    setExpenseBreakdown(expenseData)
+    try {
+      const start = startOfDay(new Date(startDate))
+      const end = endOfDay(new Date(endDate))
+
+      const [txData, expData] = await Promise.all([
+        getTransactionsByDateRange(start, end),
+        getExpensesByDateRange(start, end),
+      ])
+
+      setTransactions(Array.isArray(txData) ? txData as any : [])
+      setExpenses(Array.isArray(expData) ? expData as any : [])
+    } catch (error) {
+      console.error('Error loading analytics:', error)
+      setTransactions([])
+      setExpenses([])
+    }
     setLoading(false)
   }
 
-  const totalSales = summaries.reduce((sum, s) => sum + Number(s.totalSales), 0)
-  const totalExpenses = summaries.reduce((sum, s) => sum + Number(s.totalExpenses), 0)
+  function handleDateChange() {
+    loadAnalytics()
+  }
+
+  function setQuickRange(label: string) {
+    const today = new Date()
+    let start: Date
+
+    switch (label) {
+      case 'today':
+        start = today
+        break
+      case '7days':
+        start = subDays(today, 7)
+        break
+      case '30days':
+        start = subDays(today, 30)
+        break
+      case 'month':
+        start = startOfMonth(today)
+        break
+      default:
+        start = subDays(today, 7)
+    }
+
+    setStartDate(format(start, 'yyyy-MM-dd'))
+    setEndDate(format(today, 'yyyy-MM-dd'))
+    // Trigger reload after state update
+    setTimeout(() => loadAnalytics(), 50)
+  }
+
+  // Computed values
+  const totalSales = useMemo(() =>
+    transactions.reduce((sum, t) => sum + Number(t.total), 0),
+    [transactions]
+  )
+
+  const totalExpenses = useMemo(() =>
+    expenses.reduce((sum, e) => sum + Number(e.amount), 0),
+    [expenses]
+  )
+
   const netProfit = totalSales - totalExpenses
-  const totalTransactions = summaries.reduce((sum, s) => sum + s.transactionCount, 0)
+  const totalTransactions = transactions.length
+  const averageOrder = totalTransactions > 0 ? totalSales / totalTransactions : 0
 
-  const salesChartData = summaries.map(s => ({
-    date: new Date(s.summaryDate).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short' }),
-    sales: Number(s.totalSales),
-    expenses: Number(s.totalExpenses),
-    profit: Number(s.netProfit)
-  }))
-
-  const paymentChartData = Object.entries(paymentBreakdown).map(([method, amount]) => ({
-    method,
-    amount: Number(amount)
-  }))
-
-  const expenseChartData = Object.entries(expenseBreakdown).map(([category, amount]) => ({
-    category,
-    amount: Number(amount)
-  }))
+  // Chart data - top selling items by revenue
+  const topItemsChart = useMemo(() => {
+    const itemMap: Record<string, { name: string; revenue: number; quantity: number }> = {}
+    transactions.forEach(t => {
+      const rawItems = t.items
+      let parsedItems: any
+      try {
+        parsedItems = typeof rawItems === 'string' ? JSON.parse(rawItems) : rawItems
+      } catch {
+        parsedItems = []
+      }
+      const items: Array<{ name: string; price: number; quantity: number }> =
+        Array.isArray(parsedItems) ? parsedItems : []
+      items.forEach(item => {
+        if (!item || !item.name) return
+        if (!itemMap[item.name]) {
+          itemMap[item.name] = { name: item.name, revenue: 0, quantity: 0 }
+        }
+        itemMap[item.name].revenue += (item.price || 0) * (item.quantity || 0)
+        itemMap[item.name].quantity += item.quantity || 0
+      })
+    })
+    return Object.values(itemMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+      .map(item => ({
+        name: item.name,
+        'Jumlah Jualan (RM)': Number(item.revenue.toFixed(2))
+      }))
+  }, [transactions])
 
   if (loading) {
     return (
@@ -76,236 +151,151 @@ export default function AnalyticsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analitik & Laporan</h1>
-          <p className="text-gray-500 mt-1">Lihat prestasi perniagaan anda</p>
-        </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">7 Hari</SelectItem>
-            <SelectItem value="14">14 Hari</SelectItem>
-            <SelectItem value="30">30 Hari</SelectItem>
-            <SelectItem value="90">90 Hari</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Analitik Perniagaan</h1>
+        <p className="text-gray-500 mt-1">Data dan statistik untuk keputusan perniagaan yang bijak</p>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Ringkasan</TabsTrigger>
-          <TabsTrigger value="sales">Jualan</TabsTrigger>
-          <TabsTrigger value="expenses">Perbelanjaan</TabsTrigger>
           <TabsTrigger value="balance">Lembaran Imbangan</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          {/* Date Range Picker */}
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-4">Pilih Tempoh</h3>
+              <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+                <div>
+                  <label className="text-sm font-medium text-gray-600 mb-1 block">Dari Tarikh</label>
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-600 mb-1 block">Hingga Tarikh</label>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button onClick={handleDateChange} className="w-full md:w-auto">
+                    Tukar
+                  </Button>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-4 flex-wrap">
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('today')}>
+                  Hari Ini
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('7days')}>
+                  7 Hari Lalu
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('30days')}>
+                  30 Hari Lalu
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setQuickRange('month')}>
+                  Bulan Ini
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 5 Summary Cards */}
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Jumlah Jualan
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  RM {totalSales.toFixed(2)}
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Jumlah Jualan</p>
+                    <p className="text-xl font-bold mt-1">RM {totalSales.toFixed(2)}</p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-blue-600" />
                 </div>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Untung Bersih
-                </CardTitle>
-                {netProfit >= 0 ? (
-                  <TrendingUp className="h-4 w-4 text-blue-600" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-red-600" />
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${netProfit >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                  RM {netProfit.toFixed(2)}
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Jumlah Perbelanjaan</p>
+                    <p className="text-xl font-bold mt-1">RM {totalExpenses.toFixed(2)}</p>
+                  </div>
+                  <Receipt className="h-8 w-8 text-red-500" />
                 </div>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Perbelanjaan
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-red-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  RM {totalExpenses.toFixed(2)}
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Untung Bersih</p>
+                    <p className={`text-xl font-bold mt-1 ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      RM {netProfit.toFixed(2)}
+                    </p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-green-600" />
                 </div>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Transaksi
-                </CardTitle>
-                <ShoppingBag className="h-4 w-4 text-purple-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">
-                  {totalTransactions}
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Bilangan Transaksi</p>
+                    <p className="text-xl font-bold mt-1">{totalTransactions}</p>
+                  </div>
+                  <ArrowRightLeft className="h-8 w-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">Purata Pesanan</p>
+                    <p className="text-xl font-bold mt-1">RM {averageOrder.toFixed(2)}</p>
+                  </div>
+                  <Clock className="h-8 w-8 text-teal-600" />
                 </div>
               </CardContent>
             </Card>
           </div>
 
+          {/* Top Selling Items Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Trend Jualan & Untung</CardTitle>
+              <CardTitle>Item Menu Paling Menguntungkan</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={salesChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="sales" stroke="#10B981" name="Jualan" />
-                  <Line type="monotone" dataKey="profit" stroke="#3B82F6" name="Untung" />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Item Terlaris</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {topItems.slice(0, 5).map((item, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg font-bold text-gray-400">{index + 1}</span>
-                        <span className="text-sm">{item.name}</span>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold">{item.quantity} unit</p>
-                        <p className="text-xs text-gray-500">RM {item.revenue.toFixed(2)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Kaedah Bayaran</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={paymentChartData}
-                      dataKey="amount"
-                      nameKey="method"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      label
-                    >
-                      {paymentChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
+              {topItemsChart.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">Tiada data untuk tempoh ini</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={topItemsChart}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="name"
+                      angle={-45}
+                      textAnchor="end"
+                      height={100}
+                      interval={0}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis />
                     <Tooltip />
-                  </PieChart>
+                    <Legend />
+                    <Bar dataKey="Jumlah Jualan (RM)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="sales" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Trend Jualan Harian</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={salesChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="sales" fill="#10B981" name="Jualan" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Pecahan Kaedah Bayaran</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {paymentChartData.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <span>{item.method}</span>
-                    <span className="font-bold">RM {item.amount.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="expenses" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Perbelanjaan Mengikut Kategori</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart data={expenseChartData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="category" type="category" width={120} />
-                  <Tooltip />
-                  <Bar dataKey="amount" fill="#EF4444" name="Jumlah (RM)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Ringkasan Perbelanjaan</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {expenseChartData.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                    <span>{item.category}</span>
-                    <span className="font-bold text-red-600">RM {item.amount.toFixed(2)}</span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg border-2 border-red-200">
-                  <span className="font-bold">JUMLAH</span>
-                  <span className="font-bold text-red-600">RM {totalExpenses.toFixed(2)}</span>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -316,7 +306,7 @@ export default function AnalyticsPage() {
               <CardTitle>Pilih Bulan</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex space-x-4">
+              <div className="flex gap-4">
                 <Select value={balanceSheetMonth.toString()} onValueChange={(v) => setBalanceSheetMonth(parseInt(v))}>
                   <SelectTrigger className="w-40">
                     <SelectValue />

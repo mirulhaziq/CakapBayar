@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
   reactCompiler: true,
+  // Prevent Turbopack from bundling Prisma (causes binary engine issues)
+  serverExternalPackages: ['@prisma/client', 'prisma'],
 };
 
 export default nextConfig;

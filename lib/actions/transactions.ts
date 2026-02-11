@@ -3,6 +3,15 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+// Convert Prisma Decimal/Date objects to plain JS types
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (_, value) =>
+    typeof value === 'object' && value !== null && typeof value.toNumber === 'function'
+      ? value.toNumber()
+      : value
+  ))
+}
+
 export async function createTransaction(data: {
   items: Array<{ item_id?: number; name: string; price: number; quantity: number }>
   subtotal: number
@@ -45,7 +54,7 @@ export async function createTransaction(data: {
     revalidatePath('/sejarah')
     revalidatePath('/analytics')
     
-    return { success: true, transaction }
+    return { success: true, transaction: serialize(transaction) }
   } catch (error) {
     console.error('Error creating transaction:', error)
     return { error: 'Gagal menyimpan transaksi' }
@@ -61,7 +70,7 @@ export async function getTransactions(limit = 50, offset = 0) {
       skip: offset
     })
 
-    return transactions
+    return serialize(transactions)
   } catch (error) {
     console.error('Error getting transactions:', error)
     return []
@@ -81,7 +90,7 @@ export async function getTransactionsByDateRange(startDate: Date, endDate: Date)
       orderBy: { transactionDate: 'desc' }
     })
 
-    return transactions
+    return serialize(transactions)
   } catch (error) {
     console.error('Error getting transactions by date range:', error)
     return []
@@ -165,13 +174,16 @@ async function updateDailySummary(date: Date) {
     const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {}
     
     transactions.forEach(t => {
-      const items = t.items as Array<{ name: string; price: number; quantity: number }>
+      const rawItems = t.items
+      const items: Array<{ name: string; price: number; quantity: number }> =
+        Array.isArray(rawItems) ? rawItems : []
       items.forEach(item => {
+        if (!item || !item.name) return
         if (!itemCounts[item.name]) {
           itemCounts[item.name] = { name: item.name, quantity: 0, revenue: 0 }
         }
-        itemCounts[item.name].quantity += item.quantity
-        itemCounts[item.name].revenue += item.price * item.quantity
+        itemCounts[item.name].quantity += item.quantity || 0
+        itemCounts[item.name].revenue += (item.price || 0) * (item.quantity || 0)
       })
     })
 

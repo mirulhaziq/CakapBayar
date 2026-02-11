@@ -3,6 +3,15 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+// Convert Prisma Decimal/Date objects to plain JS types
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (_, value) =>
+    typeof value === 'object' && value !== null && typeof value.toNumber === 'function'
+      ? value.toNumber()
+      : value
+  ))
+}
+
 export async function getMenuItems() {
   try {
     const items = await prisma.menuItem.findMany({
@@ -13,7 +22,7 @@ export async function getMenuItems() {
       ]
     })
 
-    return items
+    return serialize(items)
   } catch (error) {
     console.error('Error getting menu items:', error)
     return []
@@ -33,7 +42,7 @@ export async function getAvailableMenuItems() {
       ]
     })
 
-    return items
+    return serialize(items)
   } catch (error) {
     console.error('Error getting available menu items:', error)
     return []
@@ -63,7 +72,7 @@ export async function createMenuItem(data: {
     })
 
     revalidatePath('/menu')
-    return { success: true, item }
+    return { success: true, item: serialize(item) }
   } catch (error) {
     console.error('Error creating menu item:', error)
     return { error: 'Gagal menambah item menu' }
@@ -89,7 +98,7 @@ export async function updateMenuItem(
     })
 
     revalidatePath('/menu')
-    return { success: true, item }
+    return { success: true, item: serialize(item) }
   } catch (error) {
     console.error('Error updating menu item:', error)
     return { error: 'Gagal mengemaskini item menu' }
@@ -126,7 +135,7 @@ export async function toggleMenuItemAvailability(id: number) {
     })
 
     revalidatePath('/menu')
-    return { success: true, item: updated }
+    return { success: true, item: serialize(updated) }
   } catch (error) {
     console.error('Error toggling availability:', error)
     return { error: 'Gagal mengubah status ketersediaan' }

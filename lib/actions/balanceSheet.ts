@@ -75,8 +75,8 @@ export async function getBalanceSheet(year: number, month: number): Promise<Bala
       period: {
         year,
         month,
-        startDate,
-        endDate
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
       },
       assets: {
         current: {
@@ -135,7 +135,7 @@ export async function getBalanceSheetComparison(months = 6): Promise<MonthlyBala
         result.push({
           year,
           month,
-          date: new Date(year, month - 1),
+          date: new Date(year, month - 1).toISOString(),
           totalRevenue: balanceSheet.revenue.total,
           totalExpenses: balanceSheet.expenses.total,
           netIncome: balanceSheet.netIncome,

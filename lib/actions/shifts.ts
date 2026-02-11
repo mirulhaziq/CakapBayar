@@ -3,6 +3,15 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+// Convert Prisma Decimal/Date objects to plain JS types
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (_, value) =>
+    typeof value === 'object' && value !== null && typeof value.toNumber === 'function'
+      ? value.toNumber()
+      : value
+  ))
+}
+
 export async function openShift(openingCash: number) {
   try {
     // Check if there's already an active shift
@@ -27,7 +36,7 @@ export async function openShift(openingCash: number) {
     })
 
     revalidatePath('/shift')
-    return { success: true, shift }
+    return { success: true, shift: serialize(shift) }
   } catch (error) {
     console.error('Error opening shift:', error)
     return { error: 'Gagal membuka shift' }
@@ -72,7 +81,7 @@ export async function closeShift(shiftId: number, closingCash: number, notes?: s
     })
 
     revalidatePath('/shift')
-    return { success: true, shift: closedShift, expectedCash, cashDifference }
+    return { success: true, shift: serialize(closedShift), expectedCash, cashDifference }
   } catch (error) {
     console.error('Error closing shift:', error)
     return { error: 'Gagal menutup shift' }
@@ -96,7 +105,7 @@ export async function getActiveShift() {
       }
     })
 
-    return shift
+    return shift ? serialize(shift) : null
   } catch (error) {
     console.error('Error getting active shift:', error)
     return null
@@ -120,7 +129,7 @@ export async function getShiftHistory(limit = 10) {
       take: limit
     })
 
-    return shifts
+    return serialize(shifts)
   } catch (error) {
     console.error('Error getting shift history:', error)
     return []
@@ -141,7 +150,7 @@ export async function getShiftById(shiftId: number) {
       }
     })
 
-    return shift
+    return shift ? serialize(shift) : null
   } catch (error) {
     console.error('Error getting shift:', error)
     return null

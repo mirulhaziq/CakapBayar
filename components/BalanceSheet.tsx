@@ -229,7 +229,7 @@ export default function BalanceSheet({ year, month }: BalanceSheetProps) {
             <div>
               <p className="text-gray-500">Margin Keuntungan</p>
               <p className="text-2xl font-bold">
-                {((data.netIncome / data.revenue.total) * 100).toFixed(1)}%
+                {data.revenue.total > 0 ? ((data.netIncome / data.revenue.total) * 100).toFixed(1) : '0.0'}%
               </p>
             </div>
           </div>

@@ -12,8 +12,8 @@ export async function POST(request) {
       return NextResponse.json({ error: 'ElevenLabs API key not configured' }, { status: 500 });
     }
     
-    // Choose voice ID (Bella - clear female voice, supports multilingual)
-    const voiceId = 'EXAVITQu4vr4xnSDxMaL'; // Bella
+    // Bella works for Malay; set ELEVENLABS_VOICE_ID in .env to override (e.g. a Malay voice ID)
+    const voiceId = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // Bella - multilingual
     
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -24,12 +24,12 @@ export async function POST(request) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text,
-          model_id: 'eleven_multilingual_v2', // Supports Malay
+          text: text.trim(),
+          model_id: 'eleven_multilingual_v2',
           voice_settings: {
-            stability: 0.85,        // Higher = more consistent, clearer
-            similarity_boost: 0.6,  // Lower = more natural variation
-            style: 0.3,             // Lower = more neutral, clearer
+            stability: 1.0,         // Max clarity, less variation
+            similarity_boost: 0.75,
+            style: 0,               // Neutral for clear pronunciation
             use_speaker_boost: true
           }
         })

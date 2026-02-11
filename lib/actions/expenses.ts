@@ -3,6 +3,15 @@
 import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+// Convert Prisma Decimal/Date objects to plain JS types
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (_, value) =>
+    typeof value === 'object' && value !== null && typeof value.toNumber === 'function'
+      ? value.toNumber()
+      : value
+  ))
+}
+
 export async function createExpense(data: {
   amount: number
   category: string
@@ -36,7 +45,7 @@ export async function createExpense(data: {
     revalidatePath('/perbelanjaan')
     revalidatePath('/analytics')
     
-    return { success: true, expense }
+    return { success: true, expense: serialize(expense) }
   } catch (error) {
     console.error('Error creating expense:', error)
     return { error: 'Gagal menyimpan perbelanjaan' }
@@ -52,7 +61,7 @@ export async function getExpenses(limit = 50, offset = 0) {
       skip: offset
     })
 
-    return expenses
+    return serialize(expenses)
   } catch (error) {
     console.error('Error getting expenses:', error)
     return []
@@ -72,7 +81,7 @@ export async function getExpensesByDateRange(startDate: Date, endDate: Date) {
       orderBy: { expenseDate: 'desc' }
     })
 
-    return expenses
+    return serialize(expenses)
   } catch (error) {
     console.error('Error getting expenses by date range:', error)
     return []
@@ -119,7 +128,7 @@ export async function updateExpense(
     revalidatePath('/perbelanjaan')
     revalidatePath('/analytics')
     
-    return { success: true, expense }
+    return { success: true, expense: serialize(expense) }
   } catch (error) {
     console.error('Error updating expense:', error)
     return { error: 'Gagal mengemaskini perbelanjaan' }
@@ -204,13 +213,16 @@ async function updateDailySummary(date: Date) {
     const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {}
     
     transactions.forEach(t => {
-      const items = t.items as Array<{ name: string; price: number; quantity: number }>
+      const rawItems = t.items
+      const items: Array<{ name: string; price: number; quantity: number }> =
+        Array.isArray(rawItems) ? rawItems : []
       items.forEach(item => {
+        if (!item || !item.name) return
         if (!itemCounts[item.name]) {
           itemCounts[item.name] = { name: item.name, quantity: 0, revenue: 0 }
         }
-        itemCounts[item.name].quantity += item.quantity
-        itemCounts[item.name].revenue += item.price * item.quantity
+        itemCounts[item.name].quantity += item.quantity || 0
+        itemCounts[item.name].revenue += (item.price || 0) * (item.quantity || 0)
       })
     })
 

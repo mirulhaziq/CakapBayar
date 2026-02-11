@@ -3,6 +3,15 @@
 import prisma from '@/lib/prisma'
 import { startOfDay, endOfDay, subDays, startOfMonth, endOfMonth } from 'date-fns'
 
+// Convert Prisma Decimal/Date objects to plain JS types
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (_, value) =>
+    typeof value === 'object' && value !== null && typeof value.toNumber === 'function'
+      ? value.toNumber()
+      : value
+  ))
+}
+
 export async function getDailySummaries(days = 30) {
   try {
     const endDate = new Date()
@@ -21,7 +30,7 @@ export async function getDailySummaries(days = 30) {
       orderBy: { summaryDate: 'asc' }
     })
 
-    return summaries
+    return serialize(summaries)
   } catch (error) {
     console.error('Error getting daily summaries:', error)
     return []
@@ -88,7 +97,7 @@ export async function getTodaySummary() {
       })
     }
 
-    return summary
+    return serialize(summary)
   } catch (error) {
     console.error('Error getting today summary:', error)
     return null
@@ -148,13 +157,16 @@ export async function getTopSellingItems(days = 7) {
     const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {}
 
     transactions.forEach(t => {
-      const items = t.items as Array<{ name: string; price: number; quantity: number }>
+      const rawItems = t.items
+      const items: Array<{ name: string; price: number; quantity: number }> =
+        Array.isArray(rawItems) ? rawItems : []
       items.forEach(item => {
+        if (!item || !item.name) return
         if (!itemCounts[item.name]) {
           itemCounts[item.name] = { name: item.name, quantity: 0, revenue: 0 }
         }
-        itemCounts[item.name].quantity += item.quantity
-        itemCounts[item.name].revenue += item.price * item.quantity
+        itemCounts[item.name].quantity += item.quantity || 0
+        itemCounts[item.name].revenue += (item.price || 0) * (item.quantity || 0)
       })
     })
 

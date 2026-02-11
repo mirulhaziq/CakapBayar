@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <text x="256" y="200" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">Cakap</text>
+  <text x="256" y="340" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="bold" fill="#fbbf24" text-anchor="middle" dominant-baseline="middle">Bayar</text>
+  <circle cx="256" cy="440" r="24" fill="white" opacity="0.3"/>
+  <path d="M248 428 v24 M264 428 v24 M248 440 h16" stroke="white" stroke-width="3" fill="none" opacity="0.6"/>
+</svg>
